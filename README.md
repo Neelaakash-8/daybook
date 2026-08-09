@@ -1,8 +1,6 @@
 # Daybook — getting it onto your phone
-
-I can't compile an Android APK inside this chat (no Android SDK access here), but here's the real
-path to one, using free tools. Steps 1–2 get you a working app icon in ~10 minutes. Step 3 gets you
-an actual `.apk` file.
+ Steps 1–2 get you a working app icon in ~10 minutes. 
+ Step 3 gets you an actual `.apk` file.
 
 ## 1. Put these files somewhere public (needs to be https)
 
