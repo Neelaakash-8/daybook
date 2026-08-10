@@ -11,5 +11,5 @@
 // The service_role key bypasses Row Level Security entirely — treat it
 // like a master admin password and keep it out of any public repo.
 
-export const SUPABASE_URL = 'https://YOUR-PROJECT-REF.supabase.co';
-export const SUPABASE_ANON_KEY = 'YOUR-ANON-PUBLIC-KEY';
+export const SUPABASE_URL = 'https://bmsnssyhqzslzqesbsii.supabase.co';
+export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJtc25zc3locXpzbHpxZXNic2lpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzNTY3MjYsImV4cCI6MjEwMTkzMjcyNn0.faEAiY5irP3OcD131cQIzF-RIaH7vuY-5Y60c1EAdJg';
