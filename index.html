@@ -87,51 +87,91 @@
   .chip-btn { background:var(--surface2); border:1px solid var(--border); color:var(--teal); cursor:pointer; font-family:inherit; }
   .notes-toggle { font-size:11.5px; color:var(--teal); background:none; border:none; cursor:pointer; padding:0; margin-top:4px; }
   .notes { font-size:12.5px; color:var(--dim); margin-top:5px; line-height:1.4; }
+  .notes-label { color:var(--teal); font-weight:600; }
   .del { position:absolute; top:8px; right:8px; background:none; border:none; color:var(--dim); cursor:pointer; padding:4px; }
 
   .empty { text-align:center; color:var(--dim); font-size:13px; padding:30px 10px; }
+
+  .userbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .userbar .sub { margin:0; }
+  .banner { background:var(--surface2); border:1px solid var(--danger); color:var(--danger);
+    border-radius:10px; padding:8px 12px; font-size:12.5px; margin-bottom:14px; }
+  .banner.ok { border-color:var(--teal); color:var(--teal); }
+  .auth-toggle { text-align:center; margin-top:10px; font-size:12.5px; color:var(--dim); }
+  .auth-toggle button { background:none; border:none; color:var(--teal); cursor:pointer; font-size:12.5px; padding:0; }
 </style>
 </head>
 <body>
   <div class="app">
     <div class="header">
       <p class="title">Day<span>book</span></p>
-      <p class="sub">Paste a message. Get the date, time, and place — sorted onto your days. Everything stays on this phone.</p>
+      <p class="sub">Paste a message. Get the date, time, and place — synced to your account on every device.</p>
     </div>
 
-    <div class="card">
-      <textarea id="msgInput" class="textarea" placeholder='Paste the message here — e.g. "Team sync moved to Thursday 4pm, room 2B"'></textarea>
+    <div id="userBar" class="userbar" hidden>
+      <p class="sub" id="userEmail"></p>
+      <button class="btn btn-ghost btn-sm" onclick="App.logout()">Log out</button>
+    </div>
+
+    <div id="globalError" class="banner" hidden></div>
+
+    <!-- Auth gate: shown when signed out -->
+    <div id="authScreen" class="card">
+      <p class="field-label" id="authModeLabel">Log in</p>
+      <span class="field-label">Email</span>
+      <input id="authEmail" class="input" type="email" placeholder="you@example.com" autocomplete="username">
+      <span class="field-label">Password</span>
+      <input id="authPassword" class="input" type="password" placeholder="••••••••" autocomplete="current-password">
+      <div class="error" id="authError" hidden></div>
       <div class="row">
-        <button class="btn" id="extractBtn" onclick="App.extract()">✨ Extract event</button>
-        <button class="btn btn-ghost" onclick="App.addManual()">+ Add manually</button>
+        <button class="btn" id="authSubmitBtn" onclick="App.submitAuth()">Log in</button>
       </div>
-      <div class="error" id="parseError" hidden></div>
-      <div id="pendingList"></div>
+      <div class="auth-toggle">
+        <span id="authToggleText">Don't have an account?</span>
+        <button onclick="App.toggleAuthMode()" id="authToggleBtn">Sign up</button>
+      </div>
     </div>
 
-    <div class="card">
-      <div class="cal-head">
-        <div class="cal-nav">
-          <button class="icon-btn" onclick="App.goMonth(-1)">‹</button>
-          <span class="month-label" id="monthLabel"></span>
-          <button class="icon-btn" onclick="App.goMonth(1)">›</button>
+    <!-- Main app: shown when signed in -->
+    <div id="mainApp" hidden>
+      <div class="card">
+        <textarea id="msgInput" class="textarea" placeholder='Paste the message here — e.g. "Team sync moved to Thursday 4pm, room 2B"'></textarea>
+        <div class="row">
+          <button class="btn" id="extractBtn" onclick="App.extract()">✨ Extract event</button>
+          <button class="btn btn-ghost" onclick="App.addManual()">+ Add manually</button>
         </div>
-        <button class="today-link" onclick="App.goToday()">Today</button>
+        <div class="error" id="parseError" hidden></div>
+        <div id="pendingList"></div>
       </div>
-      <div class="grid" id="calGrid"></div>
-    </div>
 
-    <div class="agenda-head">
-      <span class="agenda-title" id="agendaTitle">Upcoming</span>
-      <div class="row" style="margin:0">
-        <button class="btn btn-sm" id="addForDate" onclick="App.addManual()" hidden>+ Add event</button>
-        <button class="clear" id="clearSel" onclick="App.clearSelection()" hidden>Show all upcoming</button>
+      <div class="card">
+        <div class="cal-head">
+          <div class="cal-nav">
+            <button class="icon-btn" onclick="App.goMonth(-1)">‹</button>
+            <span class="month-label" id="monthLabel"></span>
+            <button class="icon-btn" onclick="App.goMonth(1)">›</button>
+          </div>
+          <button class="today-link" onclick="App.goToday()">Today</button>
+        </div>
+        <div class="grid" id="calGrid"></div>
       </div>
+
+      <div class="agenda-head">
+        <span class="agenda-title" id="agendaTitle">Upcoming</span>
+        <div class="row" style="margin:0">
+          <button class="btn btn-sm" id="addForDate" onclick="App.addManual()" hidden>+ Add event</button>
+          <button class="clear" id="clearSel" onclick="App.clearSelection()" hidden>Show all upcoming</button>
+        </div>
+      </div>
+      <div id="agendaList"></div>
     </div>
-    <div id="agendaList"></div>
   </div>
 
 <script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase-config.js';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 import * as chrono from 'https://cdn.jsdelivr.net/npm/chrono-node/+esm';
 
 const clockSvg = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
@@ -176,7 +216,7 @@ function generateICS(ev) {
     allDay ? `DTEND;VALUE=DATE:${dtend}` : `DTEND:${dtend}`,
     `SUMMARY:${icsEscape(ev.title)}`,
     ev.location ? `LOCATION:${icsEscape(ev.location)}` : '',
-    ev.notes ? `DESCRIPTION:${icsEscape(ev.notes)}` : '',
+    (ev.description || ev.notes) ? `DESCRIPTION:${icsEscape([ev.description, ev.notes].filter(Boolean).join('\n\n'))}` : '',
     'BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:Reminder','TRIGGER:-P1D','END:VALARM',
     'BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:Reminder',`TRIGGER:${dayOfTrigger}`,'END:VALARM',
     'END:VEVENT','END:VCALENDAR',
@@ -261,8 +301,10 @@ function renderTicket(ev, editingId) {
         </div>
         <span class="field-label">Location (optional)</span>
         <input class="input" value="${escapeAttr(ev.location || '')}" oninput="App.updateEditingDraft('location',this.value)" placeholder="Where">
-        <span class="field-label">Description / notes</span>
-        <textarea class="input textarea" style="min-height:60px" oninput="App.updateEditingDraft('notes',this.value)" placeholder="Anything else">${escapeHtml(ev.notes || '')}</textarea>
+        <span class="field-label">Description</span>
+        <textarea class="input textarea" style="min-height:50px" oninput="App.updateEditingDraft('description',this.value)" placeholder="Extra details">${escapeHtml(ev.description || '')}</textarea>
+        <span class="field-label">Notes (optional)</span>
+        <textarea class="input textarea" style="min-height:50px" oninput="App.updateEditingDraft('notes',this.value)" placeholder="Add your own notes if needed">${escapeHtml(ev.notes || '')}</textarea>
         <div class="row" style="margin-top:2px">
           <button class="btn btn-sm" onclick="App.saveEdit()">Save changes</button>
           <button class="btn btn-ghost btn-sm" onclick="App.cancelEdit()">Cancel</button>
@@ -272,7 +314,8 @@ function renderTicket(ev, editingId) {
   }
   const timeChip = ev.time ? `<span class="chip time mono">${clockSvg}${formatTime(ev.time)}</span>` : '';
   const locChip = ev.location ? `<span class="chip loc">${pinSvg}${escapeHtml(ev.location)}</span>` : '';
-  const notesPreview = ev.notes ? `<div class="notes">${escapeHtml(ev.notes)}</div>` : '';
+  const descPreview = ev.description ? `<div class="notes">${escapeHtml(ev.description)}</div>` : '';
+  const notesPreview = ev.notes ? `<div class="notes"><span class="notes-label">Note:</span> ${escapeHtml(ev.notes)}</div>` : '';
   return `
     <div class="ticket" onclick="App.startEdit('${ev.id}')">
       <div class="ticket-date">
@@ -282,6 +325,7 @@ function renderTicket(ev, editingId) {
       <div class="ticket-body">
         <div class="ticket-title">${escapeHtml(ev.title)}</div>
         <div class="ticket-meta">${timeChip}${locChip}<button class="chip chip-btn" onclick="event.stopPropagation(); App.exportICS('${ev.id}')">${bellSvg}Add reminder</button></div>
+        ${descPreview}
         ${notesPreview}
       </div>
       <button class="del" onclick="event.stopPropagation(); App.deleteEvent('${ev.id}')">${trashSvg}</button>
@@ -294,19 +338,144 @@ const App = {
   viewMonth: (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })(),
   selectedDate: null,
   editingId: null,
-  editingDraft: null,
+  session: null,
+  authMode: 'login',
+  realtimeChannel: null,
 
-  init() {
-    try { this.events = JSON.parse(localStorage.getItem('daybook_events') || '[]'); }
-    catch (e) { this.events = []; }
-    this.renderCalendar();
-    this.renderAgenda();
+  async init() {
+    const { data: { session } } = await supabase.auth.getSession();
+    await this.handleSession(session);
+    supabase.auth.onAuthStateChange((_event, session) => { this.handleSession(session); });
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => navigator.serviceWorker.register('service-worker.js').catch(() => {}));
     }
   },
 
-  persist() { localStorage.setItem('daybook_events', JSON.stringify(this.events)); },
+  async handleSession(session) {
+    this.session = session;
+    const authScreen = document.getElementById('authScreen');
+    const mainApp = document.getElementById('mainApp');
+    const userBar = document.getElementById('userBar');
+    if (session) {
+      authScreen.hidden = true;
+      mainApp.hidden = false;
+      userBar.hidden = false;
+      document.getElementById('userEmail').textContent = session.user.email;
+      await this.loadEvents();
+      this.subscribeRealtime();
+    } else {
+      authScreen.hidden = false;
+      mainApp.hidden = true;
+      userBar.hidden = true;
+      this.unsubscribeRealtime();
+      this.events = [];
+      this.pending = [];
+      this.editingId = null;
+      this.selectedDate = null;
+    }
+  },
+
+  showGlobalError(msg, ok) {
+    const el = document.getElementById('globalError');
+    el.textContent = msg;
+    el.className = ok ? 'banner ok' : 'banner';
+    el.hidden = false;
+    if (ok) setTimeout(() => { el.hidden = true; }, 4000);
+  },
+
+  toggleAuthMode() {
+    this.authMode = this.authMode === 'login' ? 'signup' : 'login';
+    document.getElementById('authModeLabel').textContent = this.authMode === 'login' ? 'Log in' : 'Sign up';
+    document.getElementById('authSubmitBtn').textContent = this.authMode === 'login' ? 'Log in' : 'Sign up';
+    document.getElementById('authToggleText').textContent = this.authMode === 'login' ? "Don't have an account?" : 'Already have an account?';
+    document.getElementById('authToggleBtn').textContent = this.authMode === 'login' ? 'Sign up' : 'Log in';
+    document.getElementById('authError').hidden = true;
+  },
+
+  async submitAuth() {
+    const email = document.getElementById('authEmail').value.trim();
+    const password = document.getElementById('authPassword').value;
+    const errEl = document.getElementById('authError');
+    errEl.hidden = true;
+    if (!email || !password) {
+      errEl.textContent = 'Enter an email and password.';
+      errEl.hidden = false;
+      return;
+    }
+    try {
+      if (this.authMode === 'signup') {
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        if (!data.session) {
+          errEl.style.color = 'var(--teal)';
+          errEl.textContent = 'Account created — check your email to confirm, then log in.';
+          errEl.hidden = false;
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      }
+    } catch (e) {
+      errEl.style.color = 'var(--danger)';
+      errEl.textContent = e.message || 'Something went wrong.';
+      errEl.hidden = false;
+    }
+  },
+
+  async logout() {
+    await supabase.auth.signOut();
+  },
+
+  async loadEvents() {
+    try {
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .order('date', { ascending: true })
+        .order('time', { ascending: true, nullsFirst: false });
+      if (error) throw error;
+      this.events = data || [];
+      this.renderCalendar();
+      this.renderAgenda();
+    } catch (e) {
+      console.error(e);
+      this.showGlobalError("Couldn't load your calendar — check your connection and try again.");
+    }
+  },
+
+  subscribeRealtime() {
+    this.unsubscribeRealtime();
+    if (!this.session) return;
+    this.realtimeChannel = supabase
+      .channel('events-changes-' + this.session.user.id)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'events',
+        filter: `user_id=eq.${this.session.user.id}`,
+      }, (payload) => this.handleRealtimeChange(payload))
+      .subscribe();
+  },
+
+  unsubscribeRealtime() {
+    if (this.realtimeChannel) {
+      supabase.removeChannel(this.realtimeChannel);
+      this.realtimeChannel = null;
+    }
+  },
+
+  handleRealtimeChange(payload) {
+    if (payload.eventType === 'INSERT') {
+      if (!this.events.find(e => e.id === payload.new.id)) {
+        this.events = sortEvents([...this.events, payload.new]);
+      }
+    } else if (payload.eventType === 'UPDATE') {
+      this.events = sortEvents(this.events.map(e => e.id === payload.new.id ? payload.new : e));
+    } else if (payload.eventType === 'DELETE') {
+      this.events = this.events.filter(e => e.id !== payload.old.id);
+      if (this.editingId === payload.old.id) this.editingId = null;
+    }
+    this.renderCalendar();
+    this.renderAgenda();
+  },
 
   extract() {
     const input = document.getElementById('msgInput');
@@ -325,14 +494,18 @@ const App = {
       const d = r.start.date();
       const date = toISO(d);
       const time = r.start.isCertain('hour') ? toHHMM(d) : null;
-      let title = (text.slice(0, r.index) + ' ' + text.slice(r.index + r.text.length)).replace(/\s+/g, ' ').trim();
-      title = title.replace(/^[\-:,.\s]+|[\-:,.\s]+$/g, '');
-      if (title.length > 70) title = title.slice(0, 70).trim() + '…';
+      let remainder = (text.slice(0, r.index) + ' ' + text.slice(r.index + r.text.length)).replace(/\s+/g, ' ').trim();
+      remainder = remainder.replace(/^[\-:,.\s]+|[\-:,.\s]+$/g, '');
+      let title = remainder;
+      const parts = remainder.split(/\s*[,;]\s*|\s+[-–—]\s+|\s+\bat\b\s+|\s+\bon\b\s+|\s+\bfor\b\s+/i);
+      if (parts.length > 1 && parts[0].trim()) title = parts[0].trim();
+      if (title.length > 45) title = title.slice(0, 45).trim() + '…';
       if (!title) title = 'Event';
+      const description = (remainder && remainder !== title) ? remainder : null;
       let location = null;
       const locMatch = text.match(/\bat\s+([A-Z][\w'&-]*(?:\s+[A-Z][\w'&-]*){0,3})/);
       if (locMatch && !r.text.includes(locMatch[1])) location = locMatch[1];
-      this.pending.push({ id: uid(), title, date, time, location, notes: null });
+      this.pending.push({ id: uid(), title, date, time, location, description, notes: null });
     });
     this.renderPending();
     input.value = '';
@@ -340,7 +513,7 @@ const App = {
 
   addManual(dateOverride) {
     const date = dateOverride || this.selectedDate || todayISO();
-    this.pending.push({ id: uid(), title: '', date, time: null, location: null, notes: null });
+    this.pending.push({ id: uid(), title: '', date, time: null, location: null, description: null, notes: null });
     this.renderPending();
     document.getElementById('pendingList').scrollIntoView({ behavior: 'smooth', block: 'end' });
   },
@@ -355,24 +528,40 @@ const App = {
     this.renderPending();
   },
 
-  confirmPending(id) {
+  async confirmPending(id) {
     const ev = this.pending.find(p => p.id === id);
-    if (!ev || !ev.date) return;
-    const clean = { ...ev, title: (ev.title || '').trim() || 'Untitled event' };
-    this.events = sortEvents([...this.events, clean]);
-    this.persist();
-    this.pending = this.pending.filter(p => p.id !== id);
-    this.renderPending();
-    this.renderCalendar();
-    this.renderAgenda();
+    if (!ev || !ev.date || !this.session) return;
+    const title = (ev.title || '').trim() || 'Untitled event';
+    try {
+      const { data, error } = await supabase.from('events').insert({
+        user_id: this.session.user.id,
+        title, date: ev.date, time: ev.time, location: ev.location,
+        description: ev.description, notes: ev.notes,
+      }).select().single();
+      if (error) throw error;
+      this.events = sortEvents([...this.events, data]);
+      this.pending = this.pending.filter(p => p.id !== id);
+      this.renderPending();
+      this.renderCalendar();
+      this.renderAgenda();
+    } catch (e) {
+      console.error(e);
+      this.showGlobalError("Couldn't save that event — try again.");
+    }
   },
 
-  deleteEvent(id) {
-    this.events = this.events.filter(e => e.id !== id);
-    if (this.editingId === id) this.editingId = null;
-    this.persist();
-    this.renderCalendar();
-    this.renderAgenda();
+  async deleteEvent(id) {
+    try {
+      const { error } = await supabase.from('events').delete().eq('id', id);
+      if (error) throw error;
+      this.events = this.events.filter(e => e.id !== id);
+      if (this.editingId === id) this.editingId = null;
+      this.renderCalendar();
+      this.renderAgenda();
+    } catch (e) {
+      console.error(e);
+      this.showGlobalError("Couldn't delete that event — try again.");
+    }
   },
 
   selectDate(iso) {
@@ -423,15 +612,24 @@ const App = {
     if (ev) ev[field] = value || null;
   },
 
-  saveEdit() {
+  async saveEdit() {
     const ev = this.events.find(e => e.id === this.editingId);
     if (!ev || !ev.date) return;
     ev.title = (ev.title || '').trim() || 'Untitled event';
-    this.events = sortEvents(this.events);
-    this.persist();
-    this.editingId = null;
-    this.renderCalendar();
-    this.renderAgenda();
+    try {
+      const { error } = await supabase.from('events').update({
+        title: ev.title, date: ev.date, time: ev.time, location: ev.location,
+        description: ev.description, notes: ev.notes,
+      }).eq('id', ev.id);
+      if (error) throw error;
+      this.events = sortEvents(this.events);
+      this.editingId = null;
+      this.renderCalendar();
+      this.renderAgenda();
+    } catch (e) {
+      console.error(e);
+      this.showGlobalError("Couldn't save changes — try again.");
+    }
   },
 
   renderPending() {
@@ -452,8 +650,10 @@ const App = {
         </div>
         <span class="field-label">Location (optional)</span>
         <input class="input" value="${escapeAttr(ev.location || '')}" oninput="App.updatePending('${ev.id}','location',this.value)" placeholder="Where">
+        <span class="field-label">Description</span>
+        <textarea class="input textarea" style="min-height:50px" oninput="App.updatePending('${ev.id}','description',this.value)" placeholder="Extra details">${escapeHtml(ev.description || '')}</textarea>
         <span class="field-label">Notes (optional)</span>
-        <input class="input" value="${escapeAttr(ev.notes || '')}" oninput="App.updatePending('${ev.id}','notes',this.value)" placeholder="Anything else">
+        <textarea class="input textarea" style="min-height:50px" oninput="App.updatePending('${ev.id}','notes',this.value)" placeholder="Add your own notes if needed">${escapeHtml(ev.notes || '')}</textarea>
         <div class="row" style="margin-top:2px">
           <button class="btn btn-sm" onclick="App.confirmPending('${ev.id}')">Save to Daybook</button>
           <button class="btn btn-ghost btn-sm" onclick="App.discardPending('${ev.id}')">Discard</button>
