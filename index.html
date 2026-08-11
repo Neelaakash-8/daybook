@@ -99,6 +99,63 @@
   .banner.ok { border-color:var(--teal); color:var(--teal); }
   .auth-toggle { text-align:center; margin-top:10px; font-size:12.5px; color:var(--dim); }
   .auth-toggle button { background:none; border:none; color:var(--teal); cursor:pointer; font-size:12.5px; padding:0; }
+
+  html, body { overflow-x:hidden; }
+
+  /* ---------- Responsive layout ---------- */
+  /* Base (above) is the mobile layout: single column, max-width 480px. */
+
+  /* Tablet */
+  @media (min-width:640px) {
+    .app { max-width:640px; padding:28px 24px 70px; }
+    .title { font-size:25px; }
+    .card { padding:18px; }
+  }
+
+  /* Laptop / desktop: real two-column layout instead of a stretched single column */
+  @media (min-width:1024px) {
+    .app { max-width:1100px; padding:36px 32px 80px; }
+    .header { margin-bottom:26px; }
+    .title { font-size:28px; }
+    .sub { font-size:14px; }
+
+    #authScreen { max-width:420px; margin:64px auto 0; }
+
+    .layout { display:grid; grid-template-columns:400px 1fr; gap:28px; align-items:start; }
+    .col-left { display:flex; flex-direction:column; }
+    .col-right { min-width:0; }
+
+    .cell { font-size:13.5px; }
+    .ticket-title { font-size:14.5px; }
+
+    #agendaList { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:12px; align-content:start; }
+    #agendaList .date-header { grid-column:1 / -1; margin-top:6px; }
+    #agendaList .ticket, #agendaList .pending.editing { margin-bottom:0; }
+  }
+
+  /* Large desktop: cap width so lines/cards don't get absurdly wide, add breathing room */
+  @media (min-width:1440px) {
+    .app { max-width:1280px; }
+    .layout { grid-template-columns:440px 1fr; gap:36px; }
+    #agendaList { grid-template-columns:repeat(auto-fill, minmax(320px,1fr)); }
+  }
+
+  /* Touch devices (phones/tablets regardless of width): bigger tap targets */
+  @media (hover:none) and (pointer:coarse) {
+    .btn { padding:12px 16px; min-height:44px; font-size:14.5px; }
+    .btn-sm { padding:10px 14px; min-height:40px; }
+    .icon-btn { padding:10px 14px; min-height:44px; min-width:44px; }
+    .cell { min-height:40px; }
+    .del, .today-link, .clear, .notes-toggle { min-height:32px; }
+    .input, .textarea { padding:11px 12px; font-size:16px; } /* 16px prevents iOS auto-zoom on focus */
+  }
+
+  /* Very small phones */
+  @media (max-width:360px) {
+    .app { padding:16px 10px 50px; }
+    .card { padding:11px; }
+    .ticket-body { padding:9px 26px 9px 10px; }
+  }
 </style>
 </head>
 <body>
@@ -134,36 +191,42 @@
 
     <!-- Main app: shown when signed in -->
     <div id="mainApp" hidden>
-      <div class="card">
-        <textarea id="msgInput" class="textarea" placeholder='Paste the message here — e.g. "Team sync moved to Thursday 4pm, room 2B"'></textarea>
-        <div class="row">
-          <button class="btn" id="extractBtn" onclick="App.extract()">✨ Extract event</button>
-          <button class="btn btn-ghost" onclick="App.addManual()">+ Add manually</button>
-        </div>
-        <div class="error" id="parseError" hidden></div>
-        <div id="pendingList"></div>
-      </div>
-
-      <div class="card">
-        <div class="cal-head">
-          <div class="cal-nav">
-            <button class="icon-btn" onclick="App.goMonth(-1)">‹</button>
-            <span class="month-label" id="monthLabel"></span>
-            <button class="icon-btn" onclick="App.goMonth(1)">›</button>
+      <div class="layout">
+        <div class="col-left">
+          <div class="card">
+            <textarea id="msgInput" class="textarea" placeholder='Paste the message here — e.g. "Team sync moved to Thursday 4pm, room 2B"'></textarea>
+            <div class="row">
+              <button class="btn" id="extractBtn" onclick="App.extract()">✨ Extract event</button>
+              <button class="btn btn-ghost" onclick="App.addManual()">+ Add manually</button>
+            </div>
+            <div class="error" id="parseError" hidden></div>
+            <div id="pendingList"></div>
           </div>
-          <button class="today-link" onclick="App.goToday()">Today</button>
-        </div>
-        <div class="grid" id="calGrid"></div>
-      </div>
 
-      <div class="agenda-head">
-        <span class="agenda-title" id="agendaTitle">Upcoming</span>
-        <div class="row" style="margin:0">
-          <button class="btn btn-sm" id="addForDate" onclick="App.addManual()" hidden>+ Add event</button>
-          <button class="clear" id="clearSel" onclick="App.clearSelection()" hidden>Show all upcoming</button>
+          <div class="card">
+            <div class="cal-head">
+              <div class="cal-nav">
+                <button class="icon-btn" onclick="App.goMonth(-1)">‹</button>
+                <span class="month-label" id="monthLabel"></span>
+                <button class="icon-btn" onclick="App.goMonth(1)">›</button>
+              </div>
+              <button class="today-link" onclick="App.goToday()">Today</button>
+            </div>
+            <div class="grid" id="calGrid"></div>
+          </div>
+        </div>
+
+        <div class="col-right">
+          <div class="agenda-head">
+            <span class="agenda-title" id="agendaTitle">Upcoming</span>
+            <div class="row" style="margin:0">
+              <button class="btn btn-sm" id="addForDate" onclick="App.addManual()" hidden>+ Add event</button>
+              <button class="clear" id="clearSel" onclick="App.clearSelection()" hidden>Show all upcoming</button>
+            </div>
+          </div>
+          <div id="agendaList"></div>
         </div>
       </div>
-      <div id="agendaList"></div>
     </div>
   </div>
 
@@ -236,6 +299,29 @@ function downloadICS(ev) {
   setTimeout(() => URL.revokeObjectURL(url), 3000);
 }
 
+function stripMd(s) { return String(s || '').replace(/[*_`]+/g, '').trim(); }
+
+function extractLocation(text) {
+  const labelRe = /^[ \t*_-]*(?:reporting\s+venue|venue\s*\/\s*location|venue|reporting\s+location|location|address|place)\s*:\s*(.+?)[ \t*_]*$/im;
+  const m = text.match(labelRe);
+  if (m && m[1]) {
+    const loc = stripMd(m[1]);
+    if (loc) return loc;
+  }
+  const atMatch = text.match(/\bat\s+([A-Z][\w'&-]*(?:\s+[A-Z][\w'&-]*){0,4})/);
+  return atMatch ? stripMd(atMatch[1]) : null;
+}
+
+function friendlyAuthError(err) {
+  const msg = ((err && err.message) || '').toLowerCase();
+  if (msg.includes('invalid login credentials')) return 'Invalid email or password.';
+  if (msg.includes('email not confirmed')) return "Please confirm your email before logging in — check your inbox for the confirmation link (and spam folder).";
+  if (msg.includes('user already registered')) return 'An account with this email already exists — try logging in instead.';
+  if (msg.includes('rate limit') || msg.includes('too many')) return 'Too many attempts — please wait a bit and try again.';
+  if (msg.includes('password')) return err.message;
+  return (err && err.message) ? err.message : 'Something went wrong. Please try again.';
+}
+
 const uid = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(36).slice(2);
 const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 const toISO = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -292,7 +378,7 @@ function renderTicket(ev, editingId) {
         <div class="col2">
           <div>
             <span class="field-label">Date</span>
-            <input type="date" class="input" value="${ev.date}" oninput="App.updateEditingDraft('date',this.value)">
+            <input type="date" class="input" value="${ev.date}" min="${todayISO()}" oninput="App.updateEditingDraft('date',this.value)">
           </div>
           <div>
             <span class="field-label">Time (optional)</span>
@@ -338,6 +424,7 @@ const App = {
   viewMonth: (() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })(),
   selectedDate: null,
   editingId: null,
+  editingOriginalDate: null,
   session: null,
   authMode: 'login',
   realtimeChannel: null,
@@ -417,7 +504,7 @@ const App = {
       }
     } catch (e) {
       errEl.style.color = 'var(--danger)';
-      errEl.textContent = e.message || 'Something went wrong.';
+      errEl.textContent = friendlyAuthError(e);
       errEl.hidden = false;
     }
   },
@@ -495,16 +582,14 @@ const App = {
       const date = toISO(d);
       const time = r.start.isCertain('hour') ? toHHMM(d) : null;
       let remainder = (text.slice(0, r.index) + ' ' + text.slice(r.index + r.text.length)).replace(/\s+/g, ' ').trim();
-      remainder = remainder.replace(/^[\-:,.\s]+|[\-:,.\s]+$/g, '');
+      remainder = stripMd(remainder.replace(/^[\-:,.\s]+|[\-:,.\s]+$/g, ''));
       let title = remainder;
       const parts = remainder.split(/\s*[,;]\s*|\s+[-–—]\s+|\s+\bat\b\s+|\s+\bon\b\s+|\s+\bfor\b\s+/i);
       if (parts.length > 1 && parts[0].trim()) title = parts[0].trim();
       if (title.length > 45) title = title.slice(0, 45).trim() + '…';
       if (!title) title = 'Event';
       const description = (remainder && remainder !== title) ? remainder : null;
-      let location = null;
-      const locMatch = text.match(/\bat\s+([A-Z][\w'&-]*(?:\s+[A-Z][\w'&-]*){0,3})/);
-      if (locMatch && !r.text.includes(locMatch[1])) location = locMatch[1];
+      const location = extractLocation(text);
       this.pending.push({ id: uid(), title, date, time, location, description, notes: null });
     });
     this.renderPending();
@@ -531,6 +616,10 @@ const App = {
   async confirmPending(id) {
     const ev = this.pending.find(p => p.id === id);
     if (!ev || !ev.date || !this.session) return;
+    if (ev.date < todayISO()) {
+      this.showGlobalError('Past dates cannot be used for new tasks or bookings. Please select today or a future date.');
+      return;
+    }
     const title = (ev.title || '').trim() || 'Untitled event';
     try {
       const { data, error } = await supabase.from('events').insert({
@@ -598,6 +687,8 @@ const App = {
 
   startEdit(id) {
     if (this.editingId === id) return;
+    const ev = this.events.find(e => e.id === id);
+    this.editingOriginalDate = ev ? ev.date : null;
     this.editingId = id;
     this.renderAgenda();
   },
@@ -615,6 +706,10 @@ const App = {
   async saveEdit() {
     const ev = this.events.find(e => e.id === this.editingId);
     if (!ev || !ev.date) return;
+    if (ev.date < todayISO() && ev.date !== this.editingOriginalDate) {
+      this.showGlobalError('Past dates cannot be used for new tasks or bookings. Please select today or a future date.');
+      return;
+    }
     ev.title = (ev.title || '').trim() || 'Untitled event';
     try {
       const { error } = await supabase.from('events').update({
@@ -641,7 +736,7 @@ const App = {
         <div class="col2">
           <div>
             <span class="field-label">Date</span>
-            <input type="date" class="input" value="${ev.date}" oninput="App.updatePending('${ev.id}','date',this.value)">
+            <input type="date" class="input" value="${ev.date}" min="${todayISO()}" oninput="App.updatePending('${ev.id}','date',this.value)">
           </div>
           <div>
             <span class="field-label">Time (optional)</span>
