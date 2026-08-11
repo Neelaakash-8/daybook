@@ -65,7 +65,8 @@
   .cell.selected .dot { background:#1a1305; }
 
   .agenda-head { display:flex; align-items:center; justify-content:space-between; margin:18px 0 8px; }
-  .agenda-title { font-size:13px; font-weight:700; color:var(--dim); text-transform:uppercase; letter-spacing:0.06em; }
+  .agenda-title { font-size:13px; font-weight:700; color:var(--dim); text-transform:uppercase; letter-spacing:0.06em; cursor:pointer; }
+  .chevron { color:var(--dim); cursor:pointer; margin-left:2px; font-size:11px; }
   .clear { font-size:12px; color:var(--teal); background:none; border:none; cursor:pointer; }
 
   .date-header { font-size:12.5px; color:var(--amber); font-weight:700; margin:14px 0 6px; }
@@ -122,6 +123,7 @@
     #authScreen { max-width:420px; margin:64px auto 0; }
 
     .layout { display:grid; grid-template-columns:400px 1fr; gap:28px; align-items:start; }
+    .layout.calendar-hidden { grid-template-columns:1fr; }
     .col-left { display:flex; flex-direction:column; }
     .col-right { min-width:0; }
 
@@ -191,8 +193,8 @@
 
     <!-- Main app: shown when signed in -->
     <div id="mainApp" hidden>
-      <div class="layout">
-        <div class="col-left">
+      <div class="layout" id="layoutRoot">
+        <div class="col-left" id="colLeft">
           <div class="card">
             <textarea id="msgInput" class="textarea" placeholder='Paste the message here — e.g. "Team sync moved to Thursday 4pm, room 2B"'></textarea>
             <div class="row">
@@ -200,6 +202,9 @@
               <button class="btn btn-ghost" onclick="App.addManual()">+ Add manually</button>
             </div>
             <div class="error" id="parseError" hidden></div>
+            <div class="row" id="pendingActions" hidden>
+              <button class="btn btn-ghost btn-sm" onclick="App.goBackFromExtraction()">← Go back</button>
+            </div>
             <div id="pendingList"></div>
           </div>
 
@@ -216,9 +221,9 @@
           </div>
         </div>
 
-        <div class="col-right">
+        <div class="col-right" id="colRight">
           <div class="agenda-head">
-            <span class="agenda-title" id="agendaTitle">Upcoming</span>
+            <span class="agenda-title" id="agendaTitle" onclick="App.toggleCalendarView()">Upcoming</span><span class="chevron" id="agendaChevron" onclick="App.toggleCalendarView()">▾</span>
             <div class="row" style="margin:0">
               <button class="btn btn-sm" id="addForDate" onclick="App.addManual()" hidden>+ Add event</button>
               <button class="clear" id="clearSel" onclick="App.clearSelection()" hidden>Show all upcoming</button>
@@ -365,6 +370,15 @@ function getMonthGrid(year, month) {
   while (cells.length % 7 !== 0) cells.push({ day:n++, current:false });
   return cells;
 }
+function validateNotPast(dateStr, timeStr) {
+  const today = todayISO();
+  if (dateStr < today) return 'Past dates cannot be used for new tasks or bookings. Please select today or a future date.';
+  if (dateStr === today && timeStr && timeStr < toHHMM(new Date())) {
+    return 'That time has already passed today. Please choose a later time.';
+  }
+  return null;
+}
+
 function escapeAttr(s){ return String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 function escapeHtml(s){ return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
@@ -425,6 +439,7 @@ const App = {
   selectedDate: null,
   editingId: null,
   editingOriginalDate: null,
+  editingOriginalTime: null,
   session: null,
   authMode: 'login',
   realtimeChannel: null,
@@ -577,6 +592,7 @@ const App = {
       errEl.hidden = false;
       return;
     }
+    this.lastExtractedText = text;
     results.forEach(r => {
       const d = r.start.date();
       const date = toISO(d);
@@ -603,6 +619,22 @@ const App = {
     document.getElementById('pendingList').scrollIntoView({ behavior: 'smooth', block: 'end' });
   },
 
+  goBackFromExtraction() {
+    this.pending = [];
+    const input = document.getElementById('msgInput');
+    input.value = this.lastExtractedText || '';
+    this.renderPending();
+    input.focus();
+  },
+
+  toggleCalendarView() {
+    this.calendarHidden = !this.calendarHidden;
+    document.getElementById('colLeft').style.display = this.calendarHidden ? 'none' : '';
+    document.getElementById('layoutRoot').classList.toggle('calendar-hidden', this.calendarHidden);
+    document.getElementById('agendaChevron').textContent = this.calendarHidden ? '▸' : '▾';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  },
+
   updatePending(id, field, value) {
     const ev = this.pending.find(p => p.id === id);
     if (ev) ev[field] = value || null;
@@ -616,8 +648,9 @@ const App = {
   async confirmPending(id) {
     const ev = this.pending.find(p => p.id === id);
     if (!ev || !ev.date || !this.session) return;
-    if (ev.date < todayISO()) {
-      this.showGlobalError('Past dates cannot be used for new tasks or bookings. Please select today or a future date.');
+    const err = validateNotPast(ev.date, ev.time);
+    if (err) {
+      this.showGlobalError(err);
       return;
     }
     const title = (ev.title || '').trim() || 'Untitled event';
@@ -640,6 +673,7 @@ const App = {
   },
 
   async deleteEvent(id) {
+    if (!confirm('Delete this event? This can\'t be undone.')) return;
     try {
       const { error } = await supabase.from('events').delete().eq('id', id);
       if (error) throw error;
@@ -689,6 +723,7 @@ const App = {
     if (this.editingId === id) return;
     const ev = this.events.find(e => e.id === id);
     this.editingOriginalDate = ev ? ev.date : null;
+    this.editingOriginalTime = ev ? ev.time : null;
     this.editingId = id;
     this.renderAgenda();
   },
@@ -706,9 +741,13 @@ const App = {
   async saveEdit() {
     const ev = this.events.find(e => e.id === this.editingId);
     if (!ev || !ev.date) return;
-    if (ev.date < todayISO() && ev.date !== this.editingOriginalDate) {
-      this.showGlobalError('Past dates cannot be used for new tasks or bookings. Please select today or a future date.');
-      return;
+    const changedDateOrTime = ev.date !== this.editingOriginalDate || ev.time !== this.editingOriginalTime;
+    if (changedDateOrTime) {
+      const err = validateNotPast(ev.date, ev.time);
+      if (err) {
+        this.showGlobalError(err);
+        return;
+      }
     }
     ev.title = (ev.title || '').trim() || 'Untitled event';
     try {
@@ -728,6 +767,7 @@ const App = {
   },
 
   renderPending() {
+    document.getElementById('pendingActions').hidden = this.pending.length === 0;
     const el = document.getElementById('pendingList');
     el.innerHTML = this.pending.map(ev => `
       <div class="pending">
